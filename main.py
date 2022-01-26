@@ -28,10 +28,6 @@ return a nn.Module object. When operating with the returned nn.Module object, an
 on sequentially by the list of objects used to create our returned object.
 """
 
-# def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    # print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
-
 
 class ResidualBlock(nn.Module):
     # Define all layers and components in our model
