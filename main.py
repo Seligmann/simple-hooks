@@ -12,7 +12,7 @@ even an entire neural network by creating an instance of a torch.nn.Module objec
 
 multiple nn.Module objects can be strung together to create a larger nn.Module object
 
-nn.Module can also be used to represent any arbitrary function `f` in PyTorch
+nn.Module can also be used to represent any arbitrary function `f` in PyTorch, and are looked at as being layers.
 
 There are two functions to override in when using nn.Module. 
     1. __init__ : Here is where you will define various parameters of a layer such as filters, kernel size for a conv
@@ -34,76 +34,40 @@ are used for the backward() function.
 
 - Tensor signature of backwards hook: hook(grad) -> Tensor or None
 - No signature for forward hook on tensor
-
 """
 
 
-class ResidualBlock(nn.Module):
-    # Define all layers and components in our model
-    def __init__(self, in_channels, out_channels, stride=1):
-        # super(ResidualBlock, self).__init__()
-        super().__init__()  # fixed for python3 update
-
-        # FIXME
-        print(ResidualBlock.__mro__)
-
-        # Conv Layer 1
-        self.conv1 = nn.Conv2d(
-            in_channels=in_channels, out_channels=out_channels,
-            kernel_size=(3, 3), stride=stride, padding=1, bias=False
-        )
-        self.bn1 = nn.BatchNorm2d(out_channels)
-
-        # Conv Layer 2
-        self.conv2 = nn.Conv2d(
-            in_channels=out_channels, out_channels=out_channels,
-            kernel_size=(3, 3), stride=1, padding=1, bias=False
-        )
-        self.bn2 = nn.BatchNorm2d(out_channels)
-
-        # Shortcut connection to downsample residual
-        # In case the output dimensions of the residual block is not the same
-        # as it's input, have a convolutional layer downsample the layer
-        # being bought forward by approporate striding and filters
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_channels != out_channels:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(
-                    in_channels=in_channels, out_channels=out_channels,
-                    kernel_size=(1, 1), stride=stride, bias=False
-                ),
-                nn.BatchNorm2d(out_channels)
-            )
-
-    # Define forward pass behavior
-    def forward(self, x):
-        out = nn.ReLU()(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += self.shortcut(x)
-        out = nn.ReLU()(out)
-        return out
-
-
-# Define a layer that multiplies the input by 5 on forward pass
-class MyLayer(nn.Module):
-    def __init__(self, param):
+class myNet(nn.Module):
+    def __init__(self):  # Define convolutional and fully connected layer, as well as the activation and flattening func
         super().__init__()
-        self.param = param
+        self.conv = nn.Conv2d(3, 10, 2, stride=2)
+        self.relu = nn.ReLU()
+        self.flatten = lambda x: x.view(-1)
+        self.fc1 = nn.Linear(160, 5)
 
     def forward(self, x):
-        return x * self.param
+        x = self.relu(self.conv(x))
+        x.register_hook(lambda grad: torch.clamp(grad, min=0))  # No gradient shall be backpropagated
+
+        # print whether there is any negative grad
+        x.register_hook(lambda grad: print("Gradients less than zero:", bool((grad < 0).any())))
+        return self.fc1(self.flatten(x))
 
 
 if __name__ == '__main__':
 
-    # Hooks for Tensors
-    # -----------------
+    net = myNet()
 
-    # Use hook that multiplies b's grad by 2
-    a = torch.ones(5)
-    a.requires_grad = True
-    b = 2 * a
-    b.retain_grad()
-    b.register_hook(lambda x: print(x))
-    b.mean().backward()
-    print(a.grad, b.grad)
+    for name, param in net.named_parameters():
+        # if the param is from a linear and is a bias
+        if "fc" in name and "bias" in name:
+            param.register_hook(lambda grad: torch.zeros(grad.shape))
+
+    out = net(torch.randn(1, 3, 8, 8))
+
+    (1 - out).mean().backward()
+
+    print("The biases are", net.fc1.bias.grad)  # bias grads are zero
+
+
+
