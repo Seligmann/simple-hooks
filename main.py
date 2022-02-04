@@ -26,6 +26,15 @@ nn.Sequential
 When initiating this class, a list of nn.Module objects in a particular sequence can be passed, which will then in turn
 return a nn.Module object. When operating with the returned nn.Module object, any input passed through will be operated
 on sequentially by the list of objects used to create our returned object.
+
+Hooks
+-----
+Forward hooks are called on the forward() function of an Autograd.Function object, and backwards hooks
+are used for the backward() function. 
+
+- Tensor signature of backwards hook: hook(grad) -> Tensor or None
+- No signature for forward hook on tensor
+
 """
 
 
@@ -87,13 +96,14 @@ class MyLayer(nn.Module):
 
 if __name__ == '__main__':
 
-    myLayerObject = MyLayer(5)
-    output = myLayerObject(torch.Tensor([9, 1, 5])) # calls forward inexplicitely
-    # print(output)
+    # Hooks for Tensors
+    # -----------------
 
-    # Using nn.Sequential
-    combinedNetwork = nn.Sequential(MyLayer(5), MyLayer(10))
-    output = combinedNetwork([2, 3])
-    # print(output)
-
-
+    # Use hook that multiplies b's grad by 2
+    a = torch.ones(5)
+    a.requires_grad = True
+    b = 2 * a
+    b.retain_grad()
+    b.register_hook(lambda x: print(x))
+    b.mean().backward()
+    print(a.grad, b.grad)
