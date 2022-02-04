@@ -37,37 +37,44 @@ are used for the backward() function.
 """
 
 
+# Append intermediate outputs of the forward function of nn.Module object to a list
+def hook_fn(m, i, o):
+    visualisation[m] = o
+
+# Register a hook to children of modules to the sequential, but not the sequential itself to enable the printing of
+# intermediate activations of modules inside nn.Sequential
+def get_all_layers(net):
+    for name, layer in net._modules.items():
+        if isinstance(layer, nn.Sequential):
+            get_all_layers(layer)
+        else:
+            layer.register_forward_hook(hook_fn)
+
 class myNet(nn.Module):
     def __init__(self):  # Define convolutional and fully connected layer, as well as the activation and flattening func
         super().__init__()
-        self.conv = nn.Conv2d(3, 10, 2, stride=2)
+        self.conv = nn.Conv2d(3, 10, 2, stride = 2)
         self.relu = nn.ReLU()
         self.flatten = lambda x: x.view(-1)
         self.fc1 = nn.Linear(160, 5)
+        self.seq = nn.Sequential(nn.Linear(5, 3), nn.Linear(3, 2))
 
     def forward(self, x):
         x = self.relu(self.conv(x))
-        x.register_hook(lambda grad: torch.clamp(grad, min=0))  # No gradient shall be backpropagated
-
-        # print whether there is any negative grad
-        x.register_hook(lambda grad: print("Gradients less than zero:", bool((grad < 0).any())))
-        return self.fc1(self.flatten(x))
+        x = self.fc1(self.flatten(x))
+        x = self.seq(x)
 
 
 if __name__ == '__main__':
 
     net = myNet()
+    visualisation = {}
 
-    for name, param in net.named_parameters():
-        # if the param is from a linear and is a bias
-        if "fc" in name and "bias" in name:
-            param.register_hook(lambda grad: torch.zeros(grad.shape))
+    get_all_layers(net)
 
     out = net(torch.randn(1, 3, 8, 8))
+    visualisation.keys()
 
-    (1 - out).mean().backward()
-
-    print("The biases are", net.fc1.bias.grad)  # bias grads are zero
 
 
 
